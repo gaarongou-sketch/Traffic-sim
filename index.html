@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Traffic Wave Simulation V6</title>
+<title>Traffic Wave Simulation V7</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
 
@@ -162,13 +162,18 @@
   /* stats */
   .stats-bar {
     display: flex; border-top: 1px solid var(--border);
-    padding: 4px 14px; flex-wrap: wrap; gap: 14px; flex-shrink: 0;
+    padding: 4px 14px; flex-wrap: wrap; gap: 8px 14px; flex-shrink: 0;
+  }
+  .stats-group {
+    display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap;
   }
   .stat { display: flex; flex-direction: column; }
   .stat-label { font-size: 0.55rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
   .stat-val { font-family: 'Share Tech Mono', monospace; font-size: 0.88rem; color: var(--accent3); }
   .stat-val.orange { color: var(--accent2); }
   .stat-val.blue   { color: var(--accent); }
+  .stat-val.dim    { color: var(--dim); }
+  .stats-divider { width:1px; background:var(--border); align-self:stretch; margin: 0 2px; flex-shrink:0; }
 </style>
 </head>
 <body>
@@ -186,6 +191,16 @@
     <div class="btn-row">
       <button id="btnPlay" class="active" onclick="togglePlay()">⏸ Pause</button>
       <button onclick="resetSim()">↺ Reset</button>
+    </div>
+    <div class="ctrl">
+      <label>Sim speed <span id="lblSimSpeed">1×</span></label>
+      <input type="range" id="slSimSpeed" min="1" max="100" value="1" step="1"
+             oninput="onSimSpeedChange(this.value)">
+    </div>
+    <div class="ctrl">
+      <label>Run duration <span id="lblDuration">∞</span></label>
+      <input type="range" id="slDuration" min="0" max="30" value="0" step="1"
+             oninput="onDurationChange(this.value)">
     </div>
 
     <div>
@@ -245,8 +260,9 @@
     </div>
 
     <div class="info-box">
-      <strong>Road view:</strong> Drag the pan slider or two-finger swipe to scroll. Toggle "Follow Pace" to lock the view on Car 1.<br><br>
-      <strong>Chart:</strong> The window slider sets how many seconds are shown. Pause + scrub to review history.
+      <strong>Speed slider:</strong> Drag up to 100× to fast-forward. All history is recorded — pause and scrub back anytime.<br><br>
+      <strong>Road view:</strong> Rewinds in sync with the scrubber. Pan slider or two-finger swipe to scroll.<br><br>
+      <strong>Chart:</strong> Window slider sets seconds shown. Scrubber moves through full run history.
     </div>
   </div>
 
@@ -292,17 +308,47 @@
     </div>
 
     <div class="stats-bar">
-      <div class="stat"><div class="stat-label">Pace Setter</div><div class="stat-val blue"   id="statPace">—</div></div>
-      <div class="stat"><div class="stat-label">Car 2 Speed</div><div class="stat-val"         id="statCar2">—</div></div>
-      <div class="stat"><div class="stat-label">Last Car</div>   <div class="stat-val orange"  id="statLast">—</div></div>
-      <div class="stat"><div class="stat-label">Cascade Loss</div><div class="stat-val orange" id="statLoss">—</div></div>
-      <div style="width:1px;background:var(--border);align-self:stretch;margin:0 2px;flex-shrink:0;"></div>
-      <div class="stat"><div class="stat-label">Avg Pace ⌀</div> <div class="stat-val blue"   id="statAvgPace">—</div></div>
-      <div class="stat"><div class="stat-label">Avg Last ⌀</div> <div class="stat-val orange"  id="statAvgLast">—</div></div>
-      <div class="stat"><div class="stat-label">Avg Loss ⌀</div> <div class="stat-val orange"  id="statAvgLoss">—</div></div>
-      <div style="width:1px;background:var(--border);align-self:stretch;margin:0 2px;flex-shrink:0;"></div>
-      <div class="stat"><div class="stat-label">Sim Time</div>   <div class="stat-val blue"    id="statTime">0s</div></div>
-      <div class="stat"><div class="stat-label">Speed Limit</div><div class="stat-val"         id="statLimit">—</div></div>
+      <!-- Group 1: Live speeds -->
+      <div class="stats-group">
+        <div class="stat"><div class="stat-label">Pace Now</div>    <div class="stat-val blue"   id="statPace">—</div></div>
+        <div class="stat"><div class="stat-label">Car 2 Now</div>   <div class="stat-val"         id="statCar2">—</div></div>
+        <div class="stat"><div class="stat-label">Last Car Now</div><div class="stat-val orange"  id="statLast">—</div></div>
+        <div class="stat"><div class="stat-label">Loss Now</div>    <div class="stat-val orange"  id="statLoss">—</div></div>
+      </div>
+      <div class="stats-divider"></div>
+      <!-- Group 2: Run averages -->
+      <div class="stats-group">
+        <div class="stat"><div class="stat-label">Avg Pace ⌀</div>  <div class="stat-val blue"   id="statAvgPace">—</div></div>
+        <div class="stat"><div class="stat-label">Avg Last ⌀</div>  <div class="stat-val orange"  id="statAvgLast">—</div></div>
+        <div class="stat"><div class="stat-label">Avg Loss ⌀</div>  <div class="stat-val orange"  id="statAvgLoss">—</div></div>
+      </div>
+      <div class="stats-divider"></div>
+      <!-- Group 3: Min speed (pace / mid / last) -->
+      <div class="stats-group">
+        <div class="stat"><div class="stat-label">Min Pace</div>    <div class="stat-val blue"   id="statMinPace">—</div></div>
+        <div class="stat"><div class="stat-label">Min Mid</div>     <div class="stat-val"         id="statMinMid">—</div></div>
+        <div class="stat"><div class="stat-label">Min Last</div>    <div class="stat-val orange"  id="statMinLast">—</div></div>
+      </div>
+      <div class="stats-divider"></div>
+      <!-- Group 4: Std deviation -->
+      <div class="stats-group">
+        <div class="stat"><div class="stat-label">σ Pace</div>      <div class="stat-val blue"   id="statSdPace">—</div></div>
+        <div class="stat"><div class="stat-label">σ Mid</div>       <div class="stat-val"         id="statSdMid">—</div></div>
+        <div class="stat"><div class="stat-label">σ Last</div>      <div class="stat-val orange"  id="statSdLast">—</div></div>
+      </div>
+      <div class="stats-divider"></div>
+      <!-- Group 5: % time below speed limit -->
+      <div class="stats-group">
+        <div class="stat"><div class="stat-label">% Sub-limit Pace</div><div class="stat-val blue"  id="statSubPace">—</div></div>
+        <div class="stat"><div class="stat-label">% Sub-limit Mid</div> <div class="stat-val"        id="statSubMid">—</div></div>
+        <div class="stat"><div class="stat-label">% Sub-limit Last</div><div class="stat-val orange" id="statSubLast">—</div></div>
+      </div>
+      <div class="stats-divider"></div>
+      <!-- Group 6: Meta -->
+      <div class="stats-group">
+        <div class="stat"><div class="stat-label">Sim Time</div>    <div class="stat-val blue"    id="statTime">0s</div></div>
+        <div class="stat"><div class="stat-label">Speed Limit</div> <div class="stat-val"          id="statLimit">—</div></div>
+      </div>
     </div>
   </div>
 </div>
@@ -348,16 +394,21 @@ function carColor(i, N) {
 let mode = 'constant';
 let running = false;
 let simTime = 0;
-const DT = 0.05;        // physics timestep (s)
-const MAX_HISTORY = 1200; // samples stored (~60s at DT=0.05)
+const DT = 0.05;           // physics timestep (s)
+const MAX_HISTORY = 36000; // 30 minutes at DT=0.05s
 
 let cars = [];
-let speedHistory = []; // array of Float32Arrays, one per step
+let speedHistory    = []; // Float32Array of speeds per step
+let posHistory      = []; // Float32Array of x positions per step — for road rewind
+
+// ── sim speed ──
+let simSpeed = 1;       // multiplier — how many sim-seconds run per real second
+let targetDuration = 0; // sim seconds to run before auto-pause (0 = unlimited)
 
 // ── chart state ──
 let expandedMode = false;
-let timeWindowSecs = 20;         // how many seconds the chart shows at once
-let scrubEndIdx = null;          // null = live; integer = index into speedHistory of the RIGHT edge
+let timeWindowSecs = 20;
+let scrubEndIdx = null; // null = live; integer = right edge index into history
 
 // ── road pan state ──
 let followPace = true;
@@ -367,6 +418,14 @@ const ROAD_VIEW_WIDTH = 80; // metres visible at once — change to zoom in/out
 
 // ── running averages ──
 let avgPaceSum = 0, avgLastSum = 0, avgSampleCount = 0;
+
+// ── per-car deep stats (pace=0, mid=floor(N/2), last=N-1) ──
+// These reset on initCars. midIdx is recomputed when N changes.
+let statMinSpeed   = { pace: Infinity, mid: Infinity, last: Infinity };
+let statSumSq      = { pace: 0, mid: 0, last: 0 };  // for std deviation (uses avgSum above for mean)
+let statPaceSum2   = 0, statMidSum = 0, statMidSum2 = 0, statLastSum2 = 0; // sums for mid car
+let statSubLimit   = { pace: 0, mid: 0, last: 0 };  // count of steps below speed limit
+let statMidIdx     = 0; // which car index is "mid"
 
 // ═══════════════════════════════════════════════
 //  INIT CARS
@@ -389,9 +448,16 @@ function initCars() {
     });
   }
   speedHistory = [];
+  posHistory   = [];
   simTime = 0;
   scrubEndIdx = null;
   avgPaceSum = 0; avgLastSum = 0; avgSampleCount = 0;
+  statMidIdx   = Math.floor(P.numCars / 2);
+  statMinSpeed = { pace: Infinity, mid: Infinity, last: Infinity };
+  statSumSq    = { pace: 0, mid: 0, last: 0 };
+  statMidSum   = 0; statMidSum2 = 0;
+  statSubLimit = { pace: 0, mid: 0, last: 0 };
+  // Note: targetDuration and simSpeed are intentionally preserved across resets
   roadViewLeft = cars[N - 1].x - 20; // start view showing all cars
   syncScrubberUI();
   syncRoadPanUI();
@@ -410,6 +476,17 @@ function gaussian() {
 
 function step() {
   simTime += DT;
+
+  // Auto-pause when target duration reached
+  if (targetDuration > 0 && simTime >= targetDuration) {
+    simTime = targetDuration; // clamp exactly
+    running = false;
+    const btn = document.getElementById('btnPlay');
+    btn.textContent = '▶ Play';
+    btn.classList.remove('active');
+    return; // skip physics — we're done
+  }
+
   const N = cars.length;
 
   // ── Pace setter: targets P.paceSpeed ──
@@ -482,20 +559,42 @@ function step() {
     car.x += car.v * DT;
   }
 
-  // Record snapshot
+  // Record snapshots — speed and position for full rewind
   const snap = new Float32Array(N);
-  for (let i = 0; i < N; i++) snap[i] = cars[i].v;
-  if (speedHistory.length >= MAX_HISTORY) speedHistory.shift();
+  const pos  = new Float32Array(N);
+  for (let i = 0; i < N; i++) { snap[i] = cars[i].v; pos[i] = cars[i].x; }
+  if (speedHistory.length >= MAX_HISTORY) { speedHistory.shift(); posHistory.shift(); }
   speedHistory.push(snap);
+  posHistory.push(pos);
 
   // Running averages (pace setter and last car)
   avgPaceSum += cars[0].v;
   avgLastSum += cars[N - 1].v;
   avgSampleCount++;
 
+  // Deep stats — pace, mid, last
+  const midI = statMidIdx < N ? statMidIdx : N - 1;
+  const vp = cars[0].v, vm = cars[midI].v, vl = cars[N - 1].v;
+
+  // Min speed
+  if (vp < statMinSpeed.pace) statMinSpeed.pace = vp;
+  if (vm < statMinSpeed.mid)  statMinSpeed.mid  = vm;
+  if (vl < statMinSpeed.last) statMinSpeed.last = vl;
+
+  // Sum and sum-of-squares for std deviation (Welford-style via sum²/n)
+  statSumSq.pace += vp * vp;
+  statMidSum     += vm;
+  statSumSq.mid  += vm * vm;
+  statSumSq.last += vl * vl;
+
+  // % time below speed limit
+  if (vp < P.speedLimit) statSubLimit.pace++;
+  if (vm < P.speedLimit) statSubLimit.mid++;
+  if (vl < P.speedLimit) statSubLimit.last++;
+
   // Keep road view following pace setter if locked
   if (followPace) {
-    roadViewLeft = cars[0].x - ROAD_VIEW_WIDTH * 0.72;
+    roadViewLeft = cars[0].x - ROAD_VIEW_WIDTH * 0.9;
   }
 }
 
@@ -528,17 +627,37 @@ function drawRoad() {
 
   const roadY   = H * 0.55;
   const laneH   = Math.min(H * 0.5, 90);
-
-  // Pixels per metre — derived entirely from ROAD_VIEW_WIDTH and canvas width.
-  // Change ROAD_VIEW_WIDTH to zoom in/out; everything below scales automatically.
   const pxPerM  = W / ROAD_VIEW_WIDTH;
-
-  // Car pixel dimensions — directly from CAR_LENGTH in metres, no multiplier
   const carPxLen = CAR_LENGTH * pxPerM;
   const carH     = Math.max(14, Math.min(laneH * 0.52, 36));
 
-  // World → screen: car.x is rear bumper position in metres
-  function toScreen(wx) { return (wx - roadViewLeft) * pxPerM; }
+  // ── Decide which positions to draw ──
+  // When scrubbing, use the recorded position history so the road rewinds in sync.
+  // When live, use the actual car objects as before.
+  const isRewound = scrubEndIdx !== null && posHistory.length > scrubEndIdx;
+  const drawIdx   = isRewound ? scrubEndIdx : null;
+
+  // Build a lightweight array of {x, v} for rendering — either live or historical
+  const N = cars.length;
+  const renderCars = [];
+  for (let i = 0; i < N; i++) {
+    if (isRewound) {
+      renderCars.push({
+        x: posHistory[drawIdx][i],
+        v: speedHistory[drawIdx][i],
+      });
+    } else {
+      renderCars.push({ x: cars[i].x, v: cars[i].v });
+    }
+  }
+
+  // Compute roadViewLeft for rewound state: follow pace setter position from history
+  let viewLeft = roadViewLeft;
+  if (isRewound && followPace) {
+    viewLeft = renderCars[0].x - ROAD_VIEW_WIDTH * 0.9;
+  }
+
+  function toScreen(wx) { return (wx - viewLeft) * pxPerM; }
 
   // Road surface
   rctx.fillStyle = '#1c2130';
@@ -551,71 +670,57 @@ function drawRoad() {
   rctx.moveTo(0, roadY + laneH/2); rctx.lineTo(W, roadY + laneH/2);
   rctx.stroke();
 
-  // Centre dashes, scaled to metres
+  // Centre dashes
   rctx.strokeStyle = '#ffffff14'; rctx.lineWidth = 1;
   rctx.setLineDash([6 * pxPerM, 4 * pxPerM]);
   rctx.beginPath(); rctx.moveTo(0, roadY); rctx.lineTo(W, roadY);
   rctx.stroke(); rctx.setLineDash([]);
 
-  const N = cars.length;
-
   // ── Gap fills ──
-  // Visual gap = space between visual front bumper of follower and visual rear bumper of leader.
-  // Both use CAR_LENGTH — no separate visual length. If visualGap <= 0, cars are touching.
   for (let i = 1; i < N; i++) {
-    const leaderRear    = cars[i-1].x;               // rear of leader (metres)
-    const followerFront = cars[i].x + CAR_LENGTH;     // front of follower (metres)
-    const visualGap     = leaderRear - followerFront; // negative = overlapping
+    const leaderRear    = renderCars[i-1].x;
+    const followerFront = renderCars[i].x + CAR_LENGTH;
+    const visualGap     = leaderRear - followerFront;
 
     const x1 = toScreen(followerFront);
     const x2 = toScreen(leaderRear);
     if (x2 < 0 || x1 > W) continue;
 
-    // Colour by visual gap as fraction of target gap:
-    //   touching or overlapping (≤0)       → bright red
-    //   very close  (<30% of target)       → red
-    //   close       (<70% of target)       → orange
-    //   good distance                      → faint white
     const ratio = visualGap / P.targetGap;
     let gc;
-    if (ratio <= 0)   gc = '#ff000060';
-    else if (ratio < 0.3) gc = '#ff202050';
-    else if (ratio < 0.7) gc = '#ffaa0030';
-    else                  gc = '#ffffff08';
+    if (ratio <= 0)        gc = '#ff000060';
+    else if (ratio < 0.3)  gc = '#ff202050';
+    else if (ratio < 0.7)  gc = '#ffaa0030';
+    else                   gc = '#ffffff08';
 
     rctx.fillStyle = gc;
     rctx.fillRect(x1, roadY - laneH/2 + 2, Math.max(0, x2 - x1), laneH - 4);
   }
 
-  // ── Cars (draw back-to-front so Car 1 renders on top) ──
+  // ── Cars ──
   for (let i = N - 1; i >= 0; i--) {
-    const car  = cars[i];
-    const sxR  = toScreen(car.x);              // screen x of rear bumper
-    const sxF  = toScreen(car.x + CAR_LENGTH); // screen x of front bumper
-    const sxC  = (sxR + sxF) / 2;             // screen x of centre
+    const car  = renderCars[i];
+    const sxR  = toScreen(car.x);
+    const sxF  = toScreen(car.x + CAR_LENGTH);
+    const sxC  = (sxR + sxF) / 2;
     if (sxF < -10 || sxR > W + 10) continue;
 
     const color = carColor(i, N);
 
-    // Shadow
     rctx.fillStyle = '#00000055';
     rctx.fillRect(sxR + 2, roadY - carH/2 + 4, carPxLen, carH);
 
-    // Body
     rctx.fillStyle = color + 'bb';
     rctx.fillRect(sxR, roadY - carH/2, carPxLen, carH);
 
-    // Glow outline
     rctx.shadowColor = color; rctx.shadowBlur = 8;
     rctx.strokeStyle = color; rctx.lineWidth = 1.5;
     rctx.strokeRect(sxR, roadY - carH/2, carPxLen, carH);
     rctx.shadowBlur = 0;
 
-    // Windshield strip
     rctx.fillStyle = '#ffffff1a';
     rctx.fillRect(sxR + carPxLen * 0.12, roadY - carH/2 + 2, carPxLen * 0.28, carH - 4);
 
-    // Headlights on pace setter (at front bumper)
     if (i === 0) {
       rctx.fillStyle = '#ffffaacc';
       rctx.shadowColor = '#ffffaa'; rctx.shadowBlur = 10;
@@ -624,13 +729,11 @@ function drawRoad() {
       rctx.shadowBlur = 0;
     }
 
-    // Speed label above car
     rctx.fillStyle = '#ffffffdd';
     rctx.font = `${Math.max(8, Math.min(11, Math.floor(carPxLen * 0.22)))}px Share Tech Mono`;
     rctx.textAlign = 'center';
     rctx.fillText(car.v.toFixed(1), sxC, roadY - carH/2 - 5);
 
-    // Car number inside
     rctx.fillStyle = '#000000bb';
     rctx.font = `bold ${Math.max(8, Math.floor(carH * 0.48))}px Rajdhani`;
     rctx.fillText(i + 1, sxC, roadY + carH * 0.2);
@@ -641,9 +744,19 @@ function drawRoad() {
   rctx.font = 'bold 11px Rajdhani'; rctx.textAlign = 'left';
   rctx.fillText(`LIMIT ${P.speedLimit} m/s`, 8, 15);
 
-  // ── Scale bar: always shows CAR_LENGTH * 2 metres for easy reference ──
-  // (so the bar is "2 car lengths" wide — easy to visually verify)
-  const scaleMetres = CAR_LENGTH * 2; // = 10m with default 5m cars
+  // ── "REWOUND" badge — shown when viewing historical positions ──
+  if (isRewound) {
+    const t = (scrubEndIdx * DT).toFixed(1);
+    rctx.fillStyle = '#ff6b3599';
+    rctx.fillRect(W/2 - 60, 6, 120, 20);
+    rctx.fillStyle = '#fff';
+    rctx.font = 'bold 11px Rajdhani';
+    rctx.textAlign = 'center';
+    rctx.fillText(`◀ REWOUND  t=${t}s`, W/2, 20);
+  }
+
+  // ── Scale bar ──
+  const scaleMetres = CAR_LENGTH * 2;
   const barPx = scaleMetres * pxPerM;
   const barX  = W - barPx - 12, barY = H - 10;
   rctx.strokeStyle = '#ffffff66'; rctx.lineWidth = 1.5;
@@ -808,18 +921,54 @@ function updateStats() {
   if (!cars.length) return;
   const N   = cars.length;
   const fmt = v => v.toFixed(1) + ' m/s';
-  document.getElementById('statPace').textContent  = fmt(cars[0].v);
-  document.getElementById('statCar2').textContent  = N > 1 ? fmt(cars[1].v) : '—';
-  document.getElementById('statLast').textContent  = N > 1 ? fmt(cars[N-1].v) : '—';
-  document.getElementById('statLoss').textContent  = (cars[0].v - cars[N-1].v).toFixed(2) + ' m/s';
-  document.getElementById('statTime').textContent  = simTime.toFixed(1) + 's';
+  const fmtPct = v => v.toFixed(1) + '%';
+
+  // When scrubbing, show instantaneous stats from that point in history
+  const isRewound = scrubEndIdx !== null && speedHistory.length > scrubEndIdx;
+  const snap = isRewound ? speedHistory[scrubEndIdx] : null;
+
+  const paceV = snap ? snap[0]     : cars[0].v;
+  const car2V = snap ? snap[1]     : (N > 1 ? cars[1].v : null);
+  const lastV = snap ? snap[N - 1] : (N > 1 ? cars[N-1].v : null);
+  const t     = isRewound ? (scrubEndIdx * DT) : simTime;
+
+  document.getElementById('statPace').textContent  = fmt(paceV);
+  document.getElementById('statCar2').textContent  = car2V !== null ? fmt(car2V) : '—';
+  document.getElementById('statLast').textContent  = lastV !== null ? fmt(lastV) : '—';
+  document.getElementById('statLoss').textContent  = lastV !== null ? (paceV - lastV).toFixed(2) + ' m/s' : '—';
+  document.getElementById('statTime').textContent  = t.toFixed(1) + 's' + (isRewound ? ' ◀' : '');
   document.getElementById('statLimit').textContent = P.speedLimit + ' m/s';
+
   if (avgSampleCount > 0) {
-    const ap = avgPaceSum / avgSampleCount;
-    const al = avgLastSum / avgSampleCount;
+    const n  = avgSampleCount;
+    const ap = avgPaceSum / n;
+    const al = avgLastSum / n;
+    const midI = statMidIdx < N ? statMidIdx : N - 1;
+    const am = statMidSum / n;
+
+    // Averages
     document.getElementById('statAvgPace').textContent = fmt(ap);
     document.getElementById('statAvgLast').textContent = fmt(al);
     document.getElementById('statAvgLoss').textContent = (ap - al).toFixed(2) + ' m/s';
+
+    // Min speeds
+    const minP = statMinSpeed.pace, minM = statMinSpeed.mid, minL = statMinSpeed.last;
+    document.getElementById('statMinPace').textContent = minP === Infinity ? '—' : fmt(minP);
+    document.getElementById('statMinMid').textContent  = minM === Infinity ? '—' : fmt(minM);
+    document.getElementById('statMinLast').textContent = minL === Infinity ? '—' : fmt(minL);
+
+    // Std deviation: σ = sqrt(E[x²] - (E[x])²)
+    const sdP = Math.sqrt(Math.max(0, statSumSq.pace / n - ap * ap));
+    const sdM = Math.sqrt(Math.max(0, statSumSq.mid  / n - am * am));
+    const sdL = Math.sqrt(Math.max(0, statSumSq.last / n - al * al));
+    document.getElementById('statSdPace').textContent = sdP.toFixed(2) + ' m/s';
+    document.getElementById('statSdMid').textContent  = sdM.toFixed(2) + ' m/s';
+    document.getElementById('statSdLast').textContent = sdL.toFixed(2) + ' m/s';
+
+    // % time below speed limit
+    document.getElementById('statSubPace').textContent = fmtPct(statSubLimit.pace / n * 100);
+    document.getElementById('statSubMid').textContent  = fmtPct(statSubLimit.mid  / n * 100);
+    document.getElementById('statSubLast').textContent = fmtPct(statSubLimit.last / n * 100);
   }
 }
 
@@ -831,7 +980,8 @@ let lastTS = null, accumulator = 0;
 function loop(ts) {
   if (!running) return;
   if (lastTS !== null) {
-    const elapsed = Math.min((ts - lastTS) / 1000, 0.1);
+    // Scale elapsed real time by simSpeed to get sim time to advance
+    const elapsed = Math.min((ts - lastTS) / 1000, 0.1) * simSpeed;
     accumulator += elapsed;
     while (accumulator >= DT) { step(); accumulator -= DT; }
   }
@@ -865,10 +1015,9 @@ function onScrub(val) {
   const total = speedHistory.length;
   if (total < 2) return;
   const idx = Math.round(pct * (total - 1));
-  // If at rightmost, treat as live
   scrubEndIdx = (idx >= total - 1) ? null : idx;
   syncScrubberUI();
-  resizeCanvases(); drawRoad(); drawChart();
+  resizeCanvases(); drawRoad(); drawChart(); updateStats();
 }
 
 // ═══════════════════════════════════════════════
@@ -919,7 +1068,7 @@ function toggleFollowPace() {
   const btn = document.getElementById('btnFollowPace');
   btn.classList.toggle('active', followPace);
   if (followPace && cars[0]) {
-    roadViewLeft = cars[0].x - ROAD_VIEW_WIDTH * 0.72;
+    roadViewLeft = cars[0].x - ROAD_VIEW_WIDTH * 0.9;
   }
   syncRoadPanUI();
 }
@@ -986,6 +1135,17 @@ function setMode(m) {
   mode = m;
   document.getElementById('modeConst').classList.toggle('active', m === 'constant');
   document.getElementById('modeHuman').classList.toggle('active', m === 'human');
+}
+
+function onSimSpeedChange(val) {
+  simSpeed = parseFloat(val);
+  document.getElementById('lblSimSpeed').textContent = `${simSpeed}×`;
+}
+
+function onDurationChange(val) {
+  const mins = parseInt(val);
+  targetDuration = mins * 60; // convert minutes to sim-seconds
+  document.getElementById('lblDuration').textContent = mins === 0 ? '∞' : `${mins} min`;
 }
 
 function toggleExpand() {
