@@ -1,7 +1,9 @@
 Traffic Wave Simulation
 
 This simulation models how the speed of a single vehicle affects the motion of cars further down a traffic line. The scope of the simulation is a single lane road. One vehicle, the ‘pace setter,’ is not influenced by any car in front. They are free to go as fast as the speed limit and slightly above. 
+
 The speeds of the cars behind the pace setter are necessarily influenced by the actions of the pace setter, as well as the actions of any cars between that car and the pace setter. This has the effect of amplifying the pace setter’s actions down the line. For example, if the pace setter brakes slightly, the last car in line might be slamming on their brakes. This phenomenon is known as a traffic wave or phantom traffic jam.
+
 Many people experience this frustration where it feels like they are driving well under the speed limit and wonder why the car in front isn’t going faster. This simulation attempts to show that the pace setter is in fact going the speed limit, but due to the effects of amplification the quality of the ride is much rougher. 
 
 Simulation:
