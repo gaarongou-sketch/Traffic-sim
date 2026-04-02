@@ -1,4 +1,5 @@
 Traffic Wave Simulation
+
 This simulation models how the speed of a single vehicle affects the motion of cars further down a traffic line. The scope of the simulation is a single lane road. One vehicle, the ‘pace setter,’ is not influenced by any car in front. They are free to go as fast as the speed limit and slightly above. 
 The speeds of the cars behind the pace setter are necessarily influenced by the actions of the pace setter, as well as the actions of any cars between that car and the pace setter. This has the effect of amplifying the pace setter’s actions down the line. For example, if the pace setter brakes slightly, the last car in line might be slamming on their brakes. This phenomenon is known as a traffic wave or phantom traffic jam.
 Many people experience this frustration where it feels like they are driving well under the speed limit and wonder why the car in front isn’t going faster. This simulation attempts to show that the pace setter is in fact going the speed limit, but due to the effects of amplification the quality of the ride is much rougher. 
@@ -8,9 +9,11 @@ Simulation:
 To make the simulation realistic but not too complex the user can adjust the following parameters: 
   -	Number of cars 
   -	Speed limit
+
 Pace setter: 
   -	Target speed
   -	Speed variability
+
 All other cars: 
   -	Target following distance
   -	Reaction time
@@ -18,7 +21,7 @@ All other cars:
   -	Human noise 
   -	Max allowable speed above the speed limit
 
-  The goal of the pace setter is to maintain its target speed. The goal of the following cars is to maintain their following distance by braking if they are too close and speeding up if they fall behind. Each car adjusts acceleration based on the difference between its current distance and target following distance, with a delay defined by reaction time. The braking is prioritized more, as avoiding a collision is more important than catching up. 
+The goal of the pace setter is to maintain its target speed. The goal of the following cars is to maintain their following distance by braking if they are too close and speeding up if they fall behind. Each car adjusts acceleration based on the difference between its current distance and target following distance, with a delay defined by reaction time. The braking is prioritized more, as avoiding a collision is more important than catching up. 
 Note: Human noise introduces random variation to the target catch-up speed, simulating a human driver’s inability to perfectly control velocity.
 The simulation will begin immediately when the file is opened and will run on live infinite mode unless changed. Press the “pause” button to stop the simulation, and “reset” to restart it. 
 
