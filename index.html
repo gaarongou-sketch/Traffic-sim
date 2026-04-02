@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Traffic Wave Simulation V7</title>
+<title>Traffic Wave Simulation V8</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
 
@@ -113,15 +113,7 @@
   .road-scroll-row span {
     font-family: 'Share Tech Mono', monospace; font-size: 0.6rem; color: var(--dim); white-space: nowrap;
   }
-  #roadPan {
-    flex: 1; -webkit-appearance: none; height: 4px;
-    background: var(--border); border-radius: 2px; outline: none;
-  }
-  #roadPan::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 3px;
-    background: #2a3a4a; border: 1px solid var(--accent); cursor: ew-resize;
-    box-shadow: 0 0 4px var(--accent);
-  }
+  #roadPan { display: none; } /* removed — kept as safety no-op */
   #btnFollowPace {
     flex: none; padding: 3px 8px; font-size: 0.68rem; white-space: nowrap;
   }
@@ -261,7 +253,7 @@
 
     <div class="info-box">
       <strong>Speed slider:</strong> Drag up to 100× to fast-forward. All history is recorded — pause and scrub back anytime.<br><br>
-      <strong>Road view:</strong> Rewinds in sync with the scrubber. Pan slider or two-finger swipe to scroll.<br><br>
+      <strong>Road view:</strong> Follow Pace/Mid/Last locks the view on that car. Two-finger swipe to pan freely.<br><br>
       <strong>Chart:</strong> Window slider sets seconds shown. Scrubber moves through full run history.
     </div>
   </div>
@@ -274,11 +266,11 @@
       <canvas id="roadCanvas"></canvas>
     </div>
 
-    <!-- ROAD PAN ROW -->
+    <!-- ROAD FOLLOW ROW -->
     <div class="road-scroll-row">
-      <span>◀ Pan ▶</span>
-      <input type="range" id="roadPan" min="0" max="1000" value="500">
-      <button id="btnFollowPace" class="active" onclick="toggleFollowPace()" style="flex:none;padding:4px 9px;font-size:0.68rem;">Follow Pace</button>
+      <button id="btnFollowPace" class="active" onclick="setFollow(0)"  style="flex:1;padding:4px 6px;font-size:0.68rem;">Follow Pace</button>
+      <button id="btnFollowMid"               onclick="setFollow(-1)" style="flex:1;padding:4px 6px;font-size:0.68rem;">Follow Mid</button>
+      <button id="btnFollowLast"              onclick="setFollow(-2)" style="flex:1;padding:4px 6px;font-size:0.68rem;">Follow Last</button>
     </div>
 
     <!-- CHART -->
@@ -410,11 +402,12 @@ let expandedMode = false;
 let timeWindowSecs = 20;
 let scrubEndIdx = null; // null = live; integer = right edge index into history
 
-// ── road pan state ──
-let followPace = true;
+// ── road follow state ──
+// followCar: index of car to track, or -1 = none (free pan)
+// Special sentinel values: 0=pace, -2=last car, -1=mid car (resolved at draw time)
+let followCar = 0;  // default: follow pace setter
 let roadViewLeft = 0;
-const ROAD_VIEW_WIDTH = 80; // metres visible at once — change to zoom in/out
-                             // 80m makes a 5m car take up ~6% of screen width (realistic highway view)
+const ROAD_VIEW_WIDTH = 80;
 
 // ── running averages ──
 let avgPaceSum = 0, avgLastSum = 0, avgSampleCount = 0;
@@ -458,9 +451,8 @@ function initCars() {
   statMidSum   = 0; statMidSum2 = 0;
   statSubLimit = { pace: 0, mid: 0, last: 0 };
   // Note: targetDuration and simSpeed are intentionally preserved across resets
-  roadViewLeft = cars[N - 1].x - 20; // start view showing all cars
+  roadViewLeft = cars[N - 1].x - 20;
   syncScrubberUI();
-  syncRoadPanUI();
   buildLegend();
 }
 
@@ -592,9 +584,12 @@ function step() {
   if (vm < P.speedLimit) statSubLimit.mid++;
   if (vl < P.speedLimit) statSubLimit.last++;
 
-  // Keep road view following pace setter if locked
-  if (followPace) {
-    roadViewLeft = cars[0].x - ROAD_VIEW_WIDTH * 0.9;
+  // Keep road view following the selected car if locked
+  if (followCar !== null) {
+    const N = cars.length;
+    const idx = followCar === -2 ? N - 1 : followCar === -1 ? Math.floor(N / 2) : 0;
+    const offset = followCar === 0 ? 0.9 : followCar === -1 ? 0.5 : 0.1;
+    if (cars[idx]) roadViewLeft = cars[idx].x - ROAD_VIEW_WIDTH * offset;
   }
 }
 
@@ -651,10 +646,11 @@ function drawRoad() {
     }
   }
 
-  // Compute roadViewLeft for rewound state: follow pace setter position from history
+  // Compute roadViewLeft for rewound state: follow selected car's historical position
   let viewLeft = roadViewLeft;
-  if (isRewound && followPace) {
-    viewLeft = renderCars[0].x - ROAD_VIEW_WIDTH * 0.9;
+  if (isRewound && followCar !== null) {
+    const idx = followCar === -2 ? N - 1 : followCar === -1 ? Math.floor(N / 2) : 0;
+    viewLeft = renderCars[idx].x - ROAD_VIEW_WIDTH * 0.9;
   }
 
   function toScreen(wx) { return (wx - viewLeft) * pxPerM; }
@@ -987,7 +983,6 @@ function loop(ts) {
   }
   lastTS = ts;
   syncScrubberUI();
-  syncRoadPanUI();
   resizeCanvases();
   drawRoad();
   drawChart();
@@ -1017,6 +1012,7 @@ function onScrub(val) {
   const idx = Math.round(pct * (total - 1));
   scrubEndIdx = (idx >= total - 1) ? null : idx;
   syncScrubberUI();
+  snapFollowView();
   resizeCanvases(); drawRoad(); drawChart(); updateStats();
 }
 
@@ -1030,70 +1026,46 @@ function onTWChange(val) {
 }
 
 // ═══════════════════════════════════════════════
-//  ROAD PAN — slider + trackpad swipe
+//  ROAD FOLLOW BUTTONS
 // ═══════════════════════════════════════════════
 
-// The slider maps 0–1000 to some world range
-// We compute the world range based on leftmost/rightmost car positions
-function getRoadWorldRange() {
-  if (!cars.length) return { minX: 0, maxX: 600 };
-  let minX = Infinity, maxX = -Infinity;
-  for (const c of cars) {
-    if (c.x < minX) minX = c.x;
-    if (c.x + CAR_LENGTH > maxX) maxX = c.x + CAR_LENGTH;
-  }
-  minX -= 20; maxX += 40;
-  return { minX, maxX };
-}
-
-function syncRoadPanUI() {
-  if (followPace) return; // don't fight user if following pace
-  const { minX, maxX } = getRoadWorldRange();
-  const span = maxX - minX - ROAD_VIEW_WIDTH;
-  if (span <= 0) return;
-  const pct = Math.max(0, Math.min(1, (roadViewLeft - minX) / span));
-  document.getElementById('roadPan').value = Math.round(pct * 1000);
-}
-
-function onRoadPan(val) {
-  const pct = parseFloat(val) / 1000;
-  const { minX, maxX } = getRoadWorldRange();
-  const span = maxX - minX - ROAD_VIEW_WIDTH;
-  roadViewLeft = minX + pct * Math.max(0, span);
+// sentinel: 0=pace, -1=mid, -2=last, null=free
+function setFollow(target) {
+  followCar = target;
+  document.getElementById('btnFollowPace').classList.toggle('active', target === 0);
+  document.getElementById('btnFollowMid').classList.toggle('active',  target === -1);
+  document.getElementById('btnFollowLast').classList.toggle('active', target === -2);
+  // Snap view immediately
+  snapFollowView();
   resizeCanvases(); drawRoad();
 }
 
-function toggleFollowPace() {
-  followPace = !followPace;
-  const btn = document.getElementById('btnFollowPace');
-  btn.classList.toggle('active', followPace);
-  if (followPace && cars[0]) {
-    roadViewLeft = cars[0].x - ROAD_VIEW_WIDTH * 0.9;
-  }
-  syncRoadPanUI();
+function snapFollowView() {
+  if (followCar === null) return;
+  const N = cars.length;
+  const idx = followCar === -2 ? N - 1 : followCar === -1 ? Math.floor(N / 2) : 0;
+  // Use live position, or historical if scrubbing
+  let x;
+  if (scrubEndIdx !== null && posHistory.length > scrubEndIdx) {
+    x = posHistory[scrubEndIdx][idx];
+  } else if (cars[idx]) {
+    x = cars[idx].x;
+  } else return;
+  const offset = followCar === 0 ? 0.9 : followCar === -1 ? 0.5 : 0.1;
+  roadViewLeft = x - ROAD_VIEW_WIDTH * offset;
 }
 
-// Hook up the road pan slider element
-document.getElementById('roadPan').addEventListener('input', function() {
-  followPace = false;
-  document.getElementById('btnFollowPace').classList.remove('active');
-  onRoadPan(this.value);
-});
-
-// Two-finger horizontal swipe on road canvas
+// Two-finger horizontal swipe — deactivates follow buttons (free pan)
 roadCanvas.addEventListener('wheel', function(e) {
-  // Horizontal scroll (deltaX) or shift+scroll
   const delta = e.deltaX !== 0 ? e.deltaX : (e.shiftKey ? e.deltaY : 0);
   if (delta === 0) return;
   e.preventDefault();
-  followPace = false;
+  // Deactivate all follow buttons on manual pan
+  followCar = null;
   document.getElementById('btnFollowPace').classList.remove('active');
-  // Scale delta: 1px scroll ≈ 0.8 metres
+  document.getElementById('btnFollowMid').classList.remove('active');
+  document.getElementById('btnFollowLast').classList.remove('active');
   roadViewLeft += delta * 0.8;
-  // Clamp to world range
-  const { minX, maxX } = getRoadWorldRange();
-  roadViewLeft = Math.max(minX - 50, Math.min(maxX - ROAD_VIEW_WIDTH + 50, roadViewLeft));
-  syncRoadPanUI();
   resizeCanvases(); drawRoad();
 }, { passive: false });
 
